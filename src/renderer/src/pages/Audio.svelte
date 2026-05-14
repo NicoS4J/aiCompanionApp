@@ -1,56 +1,142 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { micId, threshold } from '$lib/store.js'
+  import { conn } from '$lib/connection.svelte.js'
+
+  // AnalyserNode output bytes are 0-255 centered at 128.
+  // display rms = mean(|v-128|) * 25, so threshold on scale 50-600
+  // maps to float32 RMS via: float_rms * 2543 ≈ display_rms
+  const FLOAT_SCALE = 2543
+
+  const SAMPLE_RATE = 16000
+  const BUFFER_SIZE = 2048
+  const SILENCE_FRAMES = 15  // ~0.96 s at 16kHz/2048
+  const MIN_SPEECH_FRAMES = 4 // ~0.26 s minimum utterance
 
   let devices = $state([])
   let rms = $state(0)
-  let animFrame
+
+  let stream = null
+  let audioCtx = null
+  let analyserNode = null
+  let procNode = null
+  let animId = null
+  let sessionId = 0
 
   onMount(async () => {
     const all = await navigator.mediaDevices.enumerateDevices()
     devices = all.filter(d => d.kind === 'audioinput')
     if (!micId.value && devices.length) micId.value = devices[0].deviceId
-    startMeter()
-    return () => cancelAnimationFrame(animFrame)
   })
 
-  let stream = null
-  let analyser = null
+  onDestroy(stopAudio)
 
-  async function startMeter() {
+  $effect(() => {
+    micId.value // track mic changes
+    startAudio()
+    return stopAudio
+  })
+
+  async function startAudio() {
+    stopAudio()
+    if (!micId.value) return
+    const mySession = ++sessionId
     try {
-      stream?.getTracks().forEach(t => t.stop())
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: micId.value ? { exact: micId.value } : undefined }
+      const s = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: micId.value },
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1,
+        }
       })
-      const ctx = new AudioContext()
-      const src = ctx.createMediaStreamSource(stream)
-      analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      src.connect(analyser)
-      tick()
-    } catch {
+      if (mySession !== sessionId) { s.getTracks().forEach(t => t.stop()); return }
+      stream = s
+
+      audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE })
+      const src = audioCtx.createMediaStreamSource(stream)
+
+      // --- Meter via AnalyserNode ---
+      analyserNode = audioCtx.createAnalyser()
+      analyserNode.fftSize = 256
+      src.connect(analyserNode)
+      tickMeter()
+
+      // --- Streaming via ScriptProcessorNode ---
+      procNode = audioCtx.createScriptProcessor(BUFFER_SIZE, 1, 1)
+      let speechBuf = []
+      let silenceCount = 0
+      let speechCount = 0
+      let isSpeaking = false
+
+      procNode.onaudioprocess = (e) => {
+        if (conn.status !== 'connected' || !conn.ws || conn.ws.readyState !== 1) return
+
+        const samples = e.inputBuffer.getChannelData(0)
+
+        // Float32 RMS
+        const energy = samples.reduce((s, v) => s + v * v, 0) / samples.length
+        const floatRms = Math.sqrt(energy)
+        const isVoice = floatRms * FLOAT_SCALE > threshold.value
+
+        // Convert float32 → int16 PCM
+        const pcm = new Int16Array(samples.length)
+        for (let i = 0; i < samples.length; i++) {
+          pcm[i] = Math.max(-32768, Math.min(32767, samples[i] * 32768))
+        }
+
+        if (isVoice) {
+          if (!isSpeaking) { isSpeaking = true; speechCount = 0; speechBuf = [] }
+          speechBuf.push(pcm)
+          speechCount++
+          silenceCount = 0
+        } else if (isSpeaking) {
+          speechBuf.push(pcm)
+          silenceCount++
+          if (silenceCount >= SILENCE_FRAMES) {
+            if (speechCount >= MIN_SPEECH_FRAMES) sendAudio(speechBuf)
+            isSpeaking = false; speechBuf = []; silenceCount = 0; speechCount = 0
+          }
+        }
+      }
+
+      src.connect(procNode)
+      procNode.connect(audioCtx.destination) // required for onaudioprocess to fire
+
+    } catch (err) {
+      console.error('[audio]', err)
       rms = 0
     }
   }
 
-  function tick() {
-    if (!analyser) return
-    const buf = new Uint8Array(analyser.fftSize)
-    analyser.getByteTimeDomainData(buf)
+  function tickMeter() {
+    if (!analyserNode) return
+    const buf = new Uint8Array(analyserNode.fftSize)
+    analyserNode.getByteTimeDomainData(buf)
     const mean = buf.reduce((s, v) => s + Math.abs(v - 128), 0) / buf.length
     rms = Math.round(mean * 25)
-    animFrame = requestAnimationFrame(tick)
+    animId = requestAnimationFrame(tickMeter)
   }
 
-  function onMicChange() {
-    startMeter()
+  function sendAudio(bufs) {
+    const ws = conn.ws
+    if (!ws || ws.readyState !== 1) return
+    const total = bufs.reduce((s, b) => s + b.length, 0)
+    const out = new Int16Array(total)
+    let off = 0
+    for (const b of bufs) { out.set(b, off); off += b.length }
+    ws.send(out.buffer)
   }
 
-  $effect(() => {
-    micId.value
-    onMicChange()
-  })
+  function stopAudio() {
+    cancelAnimationFrame(animId)
+    procNode?.disconnect()
+    analyserNode?.disconnect()
+    audioCtx?.close()
+    stream?.getTracks().forEach(t => t.stop())
+    procNode = null; analyserNode = null; audioCtx = null; stream = null; animId = null
+    rms = 0
+  }
 </script>
 
 <div class="flex flex-col gap-6">
@@ -63,19 +149,23 @@
     </select>
   </label>
 
-  <!-- Live level meter -->
   <div class="flex flex-col gap-2">
     <span class="text-xs font-medium text-zinc-400">Input level</span>
     <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
       <div
         class="h-full rounded-full transition-all duration-75"
-        style="width: {Math.min(rms, 100)}%; background: {rms > threshold.value ? '#22c55e' : '#6366f1'}"
+        style="width: {Math.min(rms / 6, 100)}%; background: {rms > threshold.value ? '#22c55e' : '#6366f1'}"
       ></div>
     </div>
-    <p class="text-xs text-zinc-500">Green = above sensitivity threshold</p>
+    <p class="text-xs text-zinc-500">
+      {#if conn.status === 'connected'}
+        Streaming active — green = above threshold
+      {:else}
+        Connect on the Connect tab to start streaming
+      {/if}
+    </p>
   </div>
 
-  <!-- Sensitivity slider -->
   <label class="flex flex-col gap-2">
     <div class="flex justify-between">
       <span class="text-xs font-medium text-zinc-400">Sensitivity threshold</span>
