@@ -1,0 +1,47 @@
+{
+  "name": "ai-companion-app",
+  "version": "1.0.0",
+  "description": "Local voice client for AI Companion Bot",
+  "main": "out/main/index.js",
+  "author": "NicoS4J",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-vite build && electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "autoprefixer": "^10.4.19",
+    "electron": "^42.0.1",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.38",
+    "svelte": "^5.0.0",
+    "tailwindcss": "^3.4.3",
+    "vite": "^5.2.8"
+  },
+  "build": {
+    "appId": "com.nicos4j.aicompanionapp",
+    "productName": "AI Companion",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "resources/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icon.png"
+    }
+  }
+}
