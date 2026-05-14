@@ -1,4 +1,3 @@
-// Persistent settings via localStorage
 function persisted(key, initial) {
   let value = $state(JSON.parse(localStorage.getItem(key) ?? 'null') ?? initial)
 

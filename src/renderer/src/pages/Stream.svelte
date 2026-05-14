@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { sourceId } from '$lib/store.js'
+  import { sourceId } from '$lib/store.svelte.js'
 
   let sources = $state([])
   let loading = $state(true)

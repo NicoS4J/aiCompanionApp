@@ -8,6 +8,7 @@ function createWindow() {
     width: 420,
     height: 580,
     show: false,
+    backgroundColor: '#0f0f0f',
     autoHideMenuBar: true,
     resizable: false,
     titleBarStyle: 'hidden',

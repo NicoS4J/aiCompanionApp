@@ -12,7 +12,7 @@
   ]
 </script>
 
-<div class="flex flex-col h-screen">
+<div class="flex flex-col h-screen bg-zinc-950 text-zinc-100">
   <!-- Custom titlebar drag region -->
   <div class="h-8 w-full" style="-webkit-app-region: drag"></div>
 

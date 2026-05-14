@@ -1,5 +1,5 @@
 <script>
-  import { token, serverUrl } from '$lib/store.js'
+  import { token, serverUrl } from '$lib/store.svelte.js'
   import { conn } from '$lib/connection.svelte.js'
 
   const statusColor = {

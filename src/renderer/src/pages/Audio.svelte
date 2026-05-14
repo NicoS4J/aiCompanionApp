@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
-  import { micId, threshold } from '$lib/store.js'
+  import { micId, threshold } from '$lib/store.svelte.js'
   import { conn } from '$lib/connection.svelte.js'
 
   // AnalyserNode output bytes are 0-255 centered at 128.
