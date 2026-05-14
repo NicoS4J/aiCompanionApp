@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, desktopCapturer } from 'electron'
 import { join } from 'path'
+import { autoUpdater } from 'electron-updater'
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -37,6 +38,8 @@ function createWindow() {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return win
 }
 
 app.whenReady().then(() => {
@@ -54,7 +57,18 @@ app.whenReady().then(() => {
     }))
   })
 
-  createWindow()
+  ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall()
+  })
+
+  const win = createWindow()
+
+  if (!isDev) {
+    autoUpdater.checkForUpdates()
+    autoUpdater.on('update-downloaded', () => {
+      win.webContents.send('update-downloaded')
+    })
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -9,7 +9,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder"
+    "package": "electron-vite build && electron-builder",
+    "release": "electron-vite build && electron-builder --publish always"
   },
   "dependencies": {
     "electron-updater": "^6.1.7"
@@ -28,6 +29,11 @@
   "build": {
     "appId": "com.nicos4j.aicompanionapp",
     "productName": "AI Companion",
+    "publish": {
+      "provider": "github",
+      "owner": "NicoS4J",
+      "repo": "aiCompanionApp"
+    },
     "directories": {
       "output": "dist"
     },
