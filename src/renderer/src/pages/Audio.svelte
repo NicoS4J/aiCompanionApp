@@ -9,9 +9,9 @@
   const FLOAT_SCALE = 2543
 
   const SAMPLE_RATE = 16000
-  const BUFFER_SIZE = 2048
-  const SILENCE_FRAMES = 15  // ~0.96 s at 16kHz/2048
-  const MIN_SPEECH_FRAMES = 4 // ~0.26 s minimum utterance
+  const BUFFER_SIZE = 1024   // 64 ms per frame
+  const SILENCE_FRAMES = 12  // ~768 ms silence before flush
+  const MIN_SPEECH_FRAMES = 4 // ~256 ms minimum utterance
 
   let devices = $state([])
   let rms = $state(0)
